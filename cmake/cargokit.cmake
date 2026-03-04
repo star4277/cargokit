@@ -47,6 +47,16 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     if (WIN32)
         set(SCRIPT_EXTENSION ".cmd")
         set(IMPORT_LIB_EXTENSION ".lib")
+    elseif (CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-arm64"
+     OR CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-arm"
+     OR CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-x64")
+            if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+                set(SCRIPT_EXTENSION ".cmd")
+            else()
+                set(SCRIPT_EXTENSION ".sh")
+                execute_process(COMMAND chmod +x "${cargokit_cmake_root}/run_build_tool${SCRIPT_EXTENSION}")
+            endif()
+            set(IMPORT_LIB_EXTENSION "")
     else()
         set(SCRIPT_EXTENSION ".sh")
         set(IMPORT_LIB_EXTENSION "")
@@ -65,6 +75,22 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
                 VERBATIM
             )
         endforeach()
+    elseif (CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-arm64"
+         OR CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-arm"
+         OR CARGOKIT_TARGET_PLATFORM STREQUAL "ohos-x64")
+         set(SOURCE_LIB "../../ohos/.cxx/default/default/debug/${OHOS_ARCH}/lib${PROJECT_NAME}.so")
+         set(DEST_LIB "${TARGET_LIB_DIR}/lib${PROJECT_NAME}.so")
+         add_custom_command(
+             OUTPUT
+             ${OUTPUT_LIB}
+             "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
+             COMMAND ${CMAKE_COMMAND} -E env ${CARGOKIT_ENV}
+             "${cargokit_cmake_root}/run_build_tool${SCRIPT_EXTENSION}" build-cmake
+             message(STATUS "Current source directory: ${CMAKE_CURRENT_SOURCE_DIR}")
+             COMMAND ${CMAKE_COMMAND} -E copy ${OUTPUT_LIB} ${DEST_LIB}  # 复制文件
+             COMMENT "Building and copying ${OUTPUT_LIB} to ${DEST_LIB}"  # 注释
+             VERBATIM
+           )
     else()
         add_custom_command(
             OUTPUT
