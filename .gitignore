@@ -2,3 +2,5 @@ target
 .dart_tool
 *.iml
 !pubspec.lock
+.idea/
+.vscode/
