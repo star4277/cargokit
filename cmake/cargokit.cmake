@@ -32,6 +32,9 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     else()
         set(CARGOKIT_TARGET_PLATFORM "windows-x64")
     endif()
+    if (OHOS_SDK_HOME)
+        set(CARGOKIT_OHOS_SDK_HOME "${OHOS_SDK_HOME}")
+    endif()
 
     set(CARGOKIT_ENV
         "CARGOKIT_CMAKE=${CMAKE_COMMAND}"
@@ -42,6 +45,7 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
         "CARGOKIT_TARGET_PLATFORM=${CARGOKIT_TARGET_PLATFORM}"
         "CARGOKIT_TOOL_TEMP_DIR=${CARGOKIT_TEMP_DIR}/tool"
         "CARGOKIT_ROOT_PROJECT_DIR=${CMAKE_SOURCE_DIR}"
+        "CARGOKIT_OHOS_SDK_HOME=${CARGOKIT_OHOS_SDK_HOME}"
     )
 
     if (WIN32)
