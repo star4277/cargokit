@@ -47,6 +47,14 @@ class Target {
     Target(rust: 'aarch64-unknown-linux-gnu', flutter: 'linux-arm64'),
     Target(rust: 'riscv64gc-unknown-linux-gnu', flutter: 'linux-riscv64'),
     Target(
+      rust: 'x86_64-unknown-linux-gnu',
+      flutter: 'elinux-x64',
+    ),
+    Target(
+      rust: 'aarch64-unknown-linux-gnu',
+      flutter: 'elinux-arm64',
+    ),
+    Target(
       rust: 'x86_64-apple-darwin',
       darwinPlatform: 'macosx',
       darwinArch: 'x86_64',
