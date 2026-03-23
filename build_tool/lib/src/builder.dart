@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'android_environment.dart';
 import 'cargo.dart';
 import 'environment.dart';
+import 'ohos_environment.dart';
 import 'options.dart';
 import 'rustup.dart';
 import 'target.dart';
@@ -22,6 +23,7 @@ enum BuildConfiguration {
 
 extension on BuildConfiguration {
   bool get isDebug => this == BuildConfiguration.debug;
+
   String get rustName => switch (this) {
         BuildConfiguration.debug => 'debug',
         BuildConfiguration.release => 'release',
@@ -84,9 +86,7 @@ class BuildEnvironment {
     return buildConfiguration;
   }
 
-  static BuildEnvironment fromEnvironment({
-    required bool isAndroid,
-  }) {
+  static BuildEnvironment fromEnvironment({required bool isAndroid}) {
     final buildConfiguration =
         parseBuildConfiguration(Environment.configuration);
     final manifestDir = Environment.manifestDir;
@@ -95,19 +95,18 @@ class BuildEnvironment {
     );
     final crateInfo = CrateInfo.load(manifestDir);
     return BuildEnvironment(
-      configuration: buildConfiguration,
-      crateOptions: crateOptions,
-      targetTempDir: Environment.targetTempDir,
-      manifestDir: manifestDir,
-      crateInfo: crateInfo,
-      isAndroid: isAndroid,
-      androidSdkPath: isAndroid ? Environment.sdkPath : null,
-      androidNdkVersion: isAndroid ? Environment.ndkVersion : null,
-      androidMinSdkVersion:
-          isAndroid ? int.parse(Environment.minSdkVersion) : null,
-      javaHome: isAndroid ? Environment.javaHome : null,
-      ohosSdkHome: Environment.ohosSdkHome
-    );
+        configuration: buildConfiguration,
+        crateOptions: crateOptions,
+        targetTempDir: Environment.targetTempDir,
+        manifestDir: manifestDir,
+        crateInfo: crateInfo,
+        isAndroid: isAndroid,
+        androidSdkPath: isAndroid ? Environment.sdkPath : null,
+        androidNdkVersion: isAndroid ? Environment.ndkVersion : null,
+        androidMinSdkVersion:
+            isAndroid ? int.parse(Environment.minSdkVersion) : null,
+        javaHome: isAndroid ? Environment.javaHome : null,
+        ohosSdkHome: Environment.ohosSdkHome);
   }
 }
 
@@ -181,7 +180,11 @@ class RustBuilder {
 
   Future<Map<String, String>> _buildEnvironment() async {
     if (target.ohos != null) {
-      return _buildOhosEnv();
+      return OhosEnvironment(
+              targetTempDir: environment.targetTempDir,
+              ohosSdkHome: environment.ohosSdkHome!,
+              target: target)
+          .buildEnvironment();
     }
     if (target.android != null) {
       return _buildAndroidEnv();
@@ -213,42 +216,5 @@ class RustBuilder {
       env.installNdk(javaHome: environment.javaHome!);
     }
     return env.buildEnvironment();
-  }
-
-  Map<String, String> _buildOhosEnv() {
-     final sdkPath = environment.ohosSdkHome;
-    if (sdkPath == null) {
-      throw BuildException('OHOS SDK native path is not set');
-    }
-    final exe = Platform.isWindows ? ".exe" : "";
-    final clangPath = path.join(sdkPath, 'llvm', 'bin', 'clang$exe');
-    final sysroot = path.join(sdkPath, 'sysroot');
-    String clangTarget;
-    switch (target.ohos) {
-      case 'arm64-v8a':
-        clangTarget = 'aarch64-linux-ohos';
-        break;
-      case 'armeabi-v7a':
-        clangTarget = 'arm-linux-ohos';
-        break;
-      case 'x86_64':
-        clangTarget = 'x86_64-linux-ohos';
-        break;
-      default:
-        clangTarget = 'aarch64-linux-ohos';
-    }
-    final targetEnvName = target.rust.toUpperCase().replaceAll('-', '_');
-    final linkerEnvVar = 'CARGO_TARGET_${targetEnvName}_LINKER';
-    final rustFlagsEnvVar = 'CARGO_TARGET_${targetEnvName}_RUSTFLAGS';
-    final rustFlags = '-C link-arg=--target=$clangTarget '
-        '-C link-arg=-fuse-ld=lld '
-        '-C link-arg=--sysroot=$sysroot '
-        '-C link-arg=-D__MUSL__';
-    return {
-      rustFlagsEnvVar: rustFlags,
-      linkerEnvVar: clangPath,
-      'CC_${target.rust}': clangPath,
-      "AR": path.join(sdkPath, "llvm", "bin", "llvm-ar$exe")
-    };
   }
 }
