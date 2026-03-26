@@ -248,7 +248,7 @@ class RustBuilder {
       rustFlagsEnvVar: rustFlags,
       linkerEnvVar: clangPath,
       'CC_${target.rust}': clangPath,
-      "AR": path.join(sdkPath, "llvm", "bin", "llvm-ar$exe")
+      "AR_${target.rust}": path.join(sdkPath, "llvm", "bin", "llvm-ar$exe")
     };
   }
 }
