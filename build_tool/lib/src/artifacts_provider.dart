@@ -61,34 +61,47 @@ class ArtifactProvider {
     }
 
     final rustup = Rustup();
-    for (final target in targets) {
+    
+    // Prepare all targets first (install toolchains and targets)
+    for (final target in pendingTargets) {
       final builder = RustBuilder(target: target, environment: environment);
       builder.prepare(rustup);
-      _log.info('Building ${environment.crateInfo.packageName} for $target');
-      final targetDir = await builder.build();
-      // For local build accept both static and dynamic libraries.
-      final artifactNames = <String>{
-        ...getArtifactNames(
-          target: target,
-          libraryName: environment.crateInfo.packageName,
-          aritifactType: AritifactType.dylib,
-          remote: false,
-        ),
-        ...getArtifactNames(
-          target: target,
-          libraryName: environment.crateInfo.packageName,
-          aritifactType: AritifactType.staticlib,
-          remote: false,
-        )
-      };
-      final artifacts = artifactNames
-          .map((artifactName) => Artifact(
-                path: path.join(targetDir, artifactName),
-                finalFileName: artifactName,
-              ))
-          .where((element) => File(element.path).existsSync())
-          .toList();
-      result[target] = artifacts;
+    }
+
+    // Build all targets concurrently
+    final buildResults = await Future.wait(
+      pendingTargets.map((target) async {
+        _log.info('Building ${environment.crateInfo.packageName} for $target');
+        final builder = RustBuilder(target: target, environment: environment);
+        final targetDir = await builder.build();
+        // For local build accept both static and dynamic libraries.
+        final artifactNames = <String>{
+          ...getArtifactNames(
+            target: target,
+            libraryName: environment.crateInfo.packageName,
+            aritifactType: AritifactType.dylib,
+            remote: false,
+          ),
+          ...getArtifactNames(
+            target: target,
+            libraryName: environment.crateInfo.packageName,
+            aritifactType: AritifactType.staticlib,
+            remote: false,
+          )
+        };
+        final artifacts = artifactNames
+            .map((artifactName) => Artifact(
+                  path: path.join(targetDir, artifactName),
+                  finalFileName: artifactName,
+                ))
+            .where((element) => File(element.path).existsSync())
+            .toList();
+        return MapEntry(target, artifacts);
+      }),
+    );
+
+    for (final entry in buildResults) {
+      result[entry.key] = entry.value;
     }
     return result;
   }
