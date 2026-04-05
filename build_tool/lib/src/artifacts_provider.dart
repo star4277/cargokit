@@ -61,7 +61,7 @@ class ArtifactProvider {
     }
 
     final rustup = Rustup();
-    
+
     // Prepare all targets first (install toolchains and targets)
     for (final target in pendingTargets) {
       final builder = RustBuilder(target: target, environment: environment);
@@ -127,43 +127,52 @@ class ArtifactProvider {
         path.join(environment.targetTempDir, 'precompiled', crateHash);
     Directory(downloadedArtifactsDir).createSync(recursive: true);
 
+    // Download artifacts for all targets concurrently
+    final results = await Future.wait(
+      targets.map((target) async {
+        final requiredArtifacts = getArtifactNames(
+          target: target,
+          libraryName: environment.crateInfo.packageName,
+          remote: true,
+        );
+        final artifactsForTarget = <Artifact>[];
+
+        for (final artifact in requiredArtifacts) {
+          final fileName = PrecompileBinaries.fileName(target, artifact);
+          final downloadedPath = path.join(downloadedArtifactsDir, fileName);
+          if (!File(downloadedPath).existsSync()) {
+            final signatureFileName =
+                PrecompileBinaries.signatureFileName(target, artifact);
+            await _tryDownloadArtifacts(
+              crateHash: crateHash,
+              fileName: fileName,
+              signatureFileName: signatureFileName,
+              finalPath: downloadedPath,
+            );
+          }
+          if (File(downloadedPath).existsSync()) {
+            artifactsForTarget.add(Artifact(
+              path: downloadedPath,
+              finalFileName: artifact,
+            ));
+          } else {
+            break;
+          }
+        }
+
+        // Only provide complete set of artifacts.
+        if (artifactsForTarget.length == requiredArtifacts.length) {
+          _log.fine('Found precompiled artifacts for $target');
+          return MapEntry(target, artifactsForTarget);
+        }
+        return null;
+      }),
+    );
+
     final res = <Target, List<Artifact>>{};
-
-    for (final target in targets) {
-      final requiredArtifacts = getArtifactNames(
-        target: target,
-        libraryName: environment.crateInfo.packageName,
-        remote: true,
-      );
-      final artifactsForTarget = <Artifact>[];
-
-      for (final artifact in requiredArtifacts) {
-        final fileName = PrecompileBinaries.fileName(target, artifact);
-        final downloadedPath = path.join(downloadedArtifactsDir, fileName);
-        if (!File(downloadedPath).existsSync()) {
-          final signatureFileName =
-              PrecompileBinaries.signatureFileName(target, artifact);
-          await _tryDownloadArtifacts(
-            crateHash: crateHash,
-            fileName: fileName,
-            signatureFileName: signatureFileName,
-            finalPath: downloadedPath,
-          );
-        }
-        if (File(downloadedPath).existsSync()) {
-          artifactsForTarget.add(Artifact(
-            path: downloadedPath,
-            finalFileName: artifact,
-          ));
-        } else {
-          break;
-        }
-      }
-
-      // Only provide complete set of artifacts.
-      if (artifactsForTarget.length == requiredArtifacts.length) {
-        _log.fine('Found precompiled artifacts for $target');
-        res[target] = artifactsForTarget;
+    for (final entry in results) {
+      if (entry != null) {
+        res[entry.key] = entry.value;
       }
     }
 

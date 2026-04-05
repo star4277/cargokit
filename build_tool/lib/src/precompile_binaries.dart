@@ -100,6 +100,8 @@ class PrecompileBinaries {
 
     final rustup = Rustup();
 
+    // Filter out targets that already have all artifacts
+    final targetsToBuild = <Target>[];
     for (final target in targets) {
       final artifactNames = getArtifactNames(
         target: target,
@@ -114,41 +116,65 @@ class PrecompileBinaries {
         _log.info("All artifacts for $target already exist - skipping");
         continue;
       }
+      targetsToBuild.add(target);
+    }
 
-      _log.info('Building for $target');
-
+    // Prepare all targets first (install toolchains and targets)
+    for (final target in targetsToBuild) {
       final builder =
           RustBuilder(target: target, environment: buildEnvironment);
       builder.prepare(rustup);
-      final res = await builder.build();
+    }
 
-      final assets = <CreateReleaseAsset>[];
-      for (final name in artifactNames) {
-        final file = File(path.join(res, name));
-        if (!file.existsSync()) {
-          throw Exception('Missing artifact: ${file.path}');
-        }
+    // Build all targets concurrently
+    final buildResults = await Future.wait(
+      targetsToBuild.map((target) async {
+        _log.info('Building for $target');
+        final builder =
+            RustBuilder(target: target, environment: buildEnvironment);
+        final res = await builder.build();
 
-        final data = file.readAsBytesSync();
-        final create = CreateReleaseAsset(
-          name: PrecompileBinaries.fileName(target, name),
-          contentType: "application/octet-stream",
-          assetData: data,
+        final artifactNames = getArtifactNames(
+          target: target,
+          libraryName: crateInfo.packageName,
+          remote: true,
         );
-        final signature = sign(privateKey, data);
-        final signatureCreate = CreateReleaseAsset(
-          name: signatureFileName(target, name),
-          contentType: "application/octet-stream",
-          assetData: signature,
-        );
-        bool verified = verify(public(privateKey), data, signature);
-        if (!verified) {
-          throw Exception('Signature verification failed');
+
+        final assets = <CreateReleaseAsset>[];
+        for (final name in artifactNames) {
+          final file = File(path.join(res, name));
+          if (!file.existsSync()) {
+            throw Exception('Missing artifact: ${file.path}');
+          }
+
+          final data = file.readAsBytesSync();
+          final create = CreateReleaseAsset(
+            name: PrecompileBinaries.fileName(target, name),
+            contentType: "application/octet-stream",
+            assetData: data,
+          );
+          final signature = sign(privateKey, data);
+          final signatureCreate = CreateReleaseAsset(
+            name: signatureFileName(target, name),
+            contentType: "application/octet-stream",
+            assetData: signature,
+          );
+          bool verified = verify(public(privateKey), data, signature);
+          if (!verified) {
+            throw Exception('Signature verification failed');
+          }
+          assets.add(create);
+          assets.add(signatureCreate);
         }
-        assets.add(create);
-        assets.add(signatureCreate);
-      }
-      _log.info('Uploading assets: ${assets.map((e) => e.name)}');
+        return MapEntry(target, assets);
+      }),
+    );
+
+    // Upload assets sequentially (GitHub API has rate limits)
+    for (final entry in buildResults) {
+      final target = entry.key;
+      final assets = entry.value;
+      _log.info('Uploading assets for $target: ${assets.map((e) => e.name)}');
       for (final asset in assets) {
         // This seems to be failing on CI so do it one by one
         int retryCount = 0;
