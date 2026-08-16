@@ -21,22 +21,34 @@ void main() {
     ]);
   });
 
-  test('creates xcodebuild arguments for each platform library', () {
+  test('creates xcodebuild arguments for each platform framework', () {
     expect(
       createXcframeworkArguments(
-        libraries: ['/tmp/ios.a', '/tmp/simulator.a'],
+        frameworks: [
+          '/tmp/ios/Rust.framework',
+          '/tmp/simulator/Rust.framework',
+        ],
         output: '/tmp/Rust.xcframework',
       ),
       [
         '-create-xcframework',
-        '-library',
-        '/tmp/ios.a',
-        '-library',
-        '/tmp/simulator.a',
+        '-framework',
+        '/tmp/ios/Rust.framework',
+        '-framework',
+        '/tmp/simulator/Rust.framework',
         '-output',
         '/tmp/Rust.xcframework',
       ],
     );
+  });
+
+  test('creates a dynamic framework property list', () {
+    final plist = createFrameworkInfoPlist('rust_library');
+
+    expect(plist, contains('<key>CFBundleExecutable</key>'));
+    expect(plist, contains('<string>rust_library</string>'));
+    expect(plist, contains('<string>dev.cargokit.rust-library</string>'));
+    expect(plist, contains('<string>FMWK</string>'));
   });
 
   test('uses Cargo library names for packages containing hyphens', () {
@@ -44,9 +56,10 @@ void main() {
       getArtifactNames(
         target: Target.forRustTriple('aarch64-apple-ios')!,
         libraryName: 'rust-library',
+        aritifactType: AritifactType.dylib,
         remote: false,
       ),
-      ['librust_library.a'],
+      ['librust_library.dylib'],
     );
   });
 }
