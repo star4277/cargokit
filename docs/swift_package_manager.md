@@ -11,6 +11,11 @@ pre-build step. The plugin calls it with:
 cargokit/build_spm.sh <cargo-manifest-dir> <output-file> <plugin-work-dir>
 ```
 
+The generated integration sets `CARGOKIT_DART_PACKAGE_CONFIG` to the package
+configuration prepared when CargoKit was installed into the Flutter project.
+This lets the sandboxed build-tool plugin run CargoKit directly without a
+second `pub get`.
+
 Xcode supplies `PLATFORM_NAME`, `ARCHS`, and `CONFIGURATION`. CargoKit builds
 only those Rust targets and combines their `staticlib` artifacts into the
 requested output file. The Rust crate must therefore include `staticlib` in its

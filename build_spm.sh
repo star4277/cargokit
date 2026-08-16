@@ -33,4 +33,19 @@ export CARGOKIT_TARGET_TEMP_DIR="$PLUGIN_WORK_DIR/rust"
 export CARGOKIT_TOOL_TEMP_DIR="$PLUGIN_WORK_DIR/build_tool"
 export CARGOKIT_ROOT_PROJECT_DIR="$MANIFEST_DIR"
 
+if [ -n "${CARGOKIT_DART_PACKAGE_CONFIG:-}" ]; then
+  if [ ! -f "$CARGOKIT_DART_PACKAGE_CONFIG" ]; then
+    echo "Missing CargoKit Dart package config: $CARGOKIT_DART_PACKAGE_CONFIG" >&2
+    exit 66
+  fi
+  if [ -z "${FLUTTER_ROOT:-}" ]; then
+    echo "FLUTTER_ROOT is required with CARGOKIT_DART_PACKAGE_CONFIG" >&2
+    exit 64
+  fi
+  exec "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" \
+    --packages="$CARGOKIT_DART_PACKAGE_CONFIG" \
+    "$BASEDIR/build_tool/bin/build_tool.dart" \
+    build-spm
+fi
+
 exec "$BASEDIR/run_build_tool.sh" build-spm
