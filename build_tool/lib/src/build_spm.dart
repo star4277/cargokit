@@ -9,43 +9,29 @@ import 'options.dart';
 import 'target.dart';
 import 'util.dart';
 
-List<String> createXcframeworkArguments({
-  required Iterable<String> frameworks,
-  required String output,
+List<Target> darwinTargetsForBuild({
+  required String platformName,
+  required Iterable<String> architectures,
 }) {
-  return [
-    '-create-xcframework',
-    for (final framework in frameworks) ...['-framework', framework],
-    '-output',
-    output,
-  ];
+  return architectures.map((architecture) {
+    final target = Target.forDarwin(
+      platformName: platformName,
+      darwinAarch: architecture,
+    );
+    if (target == null) {
+      throw StateError(
+        'Unknown Darwin target or platform: $architecture, $platformName',
+      );
+    }
+    return target;
+  }).toList(growable: false);
 }
 
-String createFrameworkInfoPlist(String frameworkName) {
-  final bundleName = frameworkName.replaceAll('_', '-');
-  return '''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleExecutable</key>
-  <string>$frameworkName</string>
-  <key>CFBundleIdentifier</key>
-  <string>dev.cargokit.$bundleName</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>$frameworkName</string>
-  <key>CFBundlePackageType</key>
-  <string>FMWK</string>
-  <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
-  <key>CFBundleVersion</key>
-  <string>1</string>
-</dict>
-</plist>
-''';
+List<String> createLipoArguments({
+  required Iterable<String> libraries,
+  required String output,
+}) {
+  return ['-create', ...libraries, '-output', output];
 }
 
 class BuildSpm {
@@ -55,79 +41,52 @@ class BuildSpm {
 
   Future<void> build() async {
     if (!Platform.isMacOS) {
-      throw UnsupportedError('XCFrameworks can only be built on macOS.');
+      throw UnsupportedError('SwiftPM Apple builds require macOS.');
     }
 
+    final targets = darwinTargetsForBuild(
+      platformName: Environment.darwinPlatformName,
+      architectures: Environment.darwinArchs,
+    );
     final environment = BuildEnvironment.fromEnvironment(isAndroid: false);
-    final targetGroups = Target.darwinXcframeworkTargetGroups();
-    final targets = targetGroups.values.expand((group) => group).toList();
     final provider =
         ArtifactProvider(environment: environment, userOptions: userOptions);
     final artifacts = await provider.getArtifacts(
       targets,
-      artifactType: AritifactType.dylib,
+      artifactType: AritifactType.staticlib,
     );
 
-    final crateName = environment.crateInfo.packageName;
-    final frameworkName = crateName.replaceAll('-', '_');
-    final workDir =
-        path.join(environment.targetTempDir, 'xcframework', crateName);
-    final frameworks = <String>[];
+    final inputLibraries = targets.map((target) {
+      final libraries = (artifacts[target] ?? [])
+          .where((artifact) => artifact.type == AritifactType.staticlib)
+          .toList(growable: false);
+      if (libraries.length != 1) {
+        throw StateError(
+          'Expected one static library for $target. Swift Package Manager '
+          'builds require the Rust crate to declare '
+          'crate-type = ["staticlib"].',
+        );
+      }
+      return libraries.single.path;
+    }).toList(growable: false);
 
-    final existingWorkDir = Directory(workDir);
-    if (existingWorkDir.existsSync()) {
-      existingWorkDir.deleteSync(recursive: true);
-    }
-    Directory(workDir).createSync(recursive: true);
-
-    for (final entry in targetGroups.entries) {
-      final inputLibraries = entry.value.map((target) {
-        final dynamicLibraries = (artifacts[target] ?? [])
-            .where((artifact) => artifact.type == AritifactType.dylib)
-            .toList();
-        if (dynamicLibraries.length != 1) {
-          throw StateError(
-            'Expected one dynamic library for $target. Swift Package Manager '
-            'XCFramework builds require the Rust crate to declare '
-            'crate-type = ["cdylib"].',
-          );
-        }
-        return dynamicLibraries.single.path;
-      }).toList();
-
-      final frameworkDir = path.join(
-        workDir,
-        entry.key,
-        '$frameworkName.framework',
+    final output = Environment.outputFile;
+    Directory(path.dirname(output)).createSync(recursive: true);
+    final temporaryOutput = '$output.tmp.$pid';
+    try {
+      runCommand(
+        'lipo',
+        createLipoArguments(
+          libraries: inputLibraries,
+          output: temporaryOutput,
+        ),
       );
-      Directory(frameworkDir).createSync(recursive: true);
-      final frameworkBinary = path.join(frameworkDir, frameworkName);
-      runCommand('lipo', [
-        '-create',
-        ...inputLibraries,
-        '-output',
-        frameworkBinary,
-      ]);
-      runCommand('install_name_tool', [
-        '-id',
-        '@rpath/$frameworkName.framework/$frameworkName',
-        frameworkBinary,
-      ]);
-      File(path.join(frameworkDir, 'Info.plist'))
-          .writeAsStringSync(createFrameworkInfoPlist(frameworkName));
-      frameworks.add(frameworkDir);
+      File(temporaryOutput).renameSync(output);
+    } finally {
+      final temporaryFile = File(temporaryOutput);
+      if (temporaryFile.existsSync()) {
+        temporaryFile.deleteSync();
+      }
     }
-
-    final outputDir = Environment.outputDir;
-    final output = path.join(outputDir, '$frameworkName.xcframework');
-    Directory(outputDir).createSync(recursive: true);
-    final existingOutput = Directory(output);
-    if (existingOutput.existsSync()) {
-      existingOutput.deleteSync(recursive: true);
-    }
-    runCommand(
-      'xcodebuild',
-      createXcframeworkArguments(frameworks: frameworks, output: output),
-    );
   }
 }

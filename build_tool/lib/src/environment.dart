@@ -18,6 +18,9 @@ class Environment {
   /// Final output directory where the build artifacts are placed.
   static String get outputDir => _getEnvPath('CARGOKIT_OUTPUT_DIR');
 
+  /// Final output archive produced for a SwiftPM build-tool plugin.
+  static String get outputFile => _getEnv("CARGOKIT_OUTPUT_FILE");
+
   /// Path to the crate manifest (containing Cargo.toml).
   static String get manifestDir => _getEnvPath('CARGOKIT_MANIFEST_DIR');
 

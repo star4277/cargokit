@@ -83,7 +83,7 @@ class BuildSpmCommand extends BuildCommand {
   final name = 'build-spm';
 
   @override
-  final description = 'Build an Apple XCFramework for Swift Package Manager';
+  final description = 'Build a static Apple library for Swift Package Manager';
 
   @override
   Future<void> runBuildCommand(CargokitUserOptions options) async {

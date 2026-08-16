@@ -1,60 +1,38 @@
 # Swift Package Manager
 
-CargoKit supports Flutter's Swift Package Manager integration without a
-Flutter build hook. Generate the Rust XCFramework before resolving or building
-the Swift package, then declare it as a local SwiftPM binary target.
+CargoKit supports Flutter's Swift Package Manager integration without CocoaPods
+or Flutter build hooks. A SwiftPM build-tool plugin invokes CargoKit during the
+normal Xcode build and a companion C target links the resulting static archive.
 
-Run this from the Flutter plugin directory on macOS:
+`build_spm.sh` is the plugin entry point. Applications should not run it as a
+pre-build step. The plugin calls it with:
 
 ```sh
-path/to/cargokit/build_spm.sh rust ios/YourPlugin release
+cargokit/build_spm.sh <cargo-manifest-dir> <output-file> <plugin-work-dir>
 ```
 
-This writes `ios/YourPlugin/<cargo-library-name>.xcframework`. The Rust crate
-must include `cdylib` in its `crate-type`; CargoKit builds the iOS device, iOS
-simulator, and macOS dynamic framework slices, fixes each framework's install
-name for embedding, and combines them with `xcodebuild -create-xcframework`.
-The command replaces an existing XCFramework with the same name. Cargo library
-names use underscores when the package name contains hyphens.
+Xcode supplies `PLATFORM_NAME`, `ARCHS`, and `CONFIGURATION`. CargoKit builds
+only those Rust targets and combines their `staticlib` artifacts into the
+requested output file. The Rust crate must therefore include `staticlib` in its
+`crate-type`.
 
-Keep the generated XCFramework next to `Package.swift` and use a binary target
-in the package manifest. Replace the placeholder names and the XCFramework
-file name with the Cargo library name:
+The Swift package should keep CargoKit inside the package root so the plugin can
+execute it under SwiftPM's sandbox:
 
-```swift
-// swift-tools-version: 5.9
-import PackageDescription
-
-let package = Package(
-    name: "YourPlugin",
-    platforms: [.iOS(.v13)],
-    products: [.library(name: "YourPlugin", targets: ["YourPlugin"])],
-    dependencies: [
-        .package(name: "FlutterFramework", path: "../FlutterFramework"),
-    ],
-    targets: [
-        .binaryTarget(
-            name: "RustLibrary",
-            path: "your_cargo_package.xcframework"
-        ),
-        .target(
-            name: "YourPlugin",
-            dependencies: [
-                "RustLibrary",
-                .product(name: "FlutterFramework", package: "FlutterFramework"),
-            ]
-        ),
-    ]
-)
+```text
+Package.swift
+Sources/
+Plugins/CargoKitPlugin/plugin.swift
+cargokit/build_spm.sh
+cargokit/run_build_tool.sh
 ```
 
-Add a source file such as `ios/YourPlugin/Sources/YourPlugin/Empty.swift` so
-the Swift target exists:
+The package manifest adds the build-tool plugin to a C linker target. That
+target uses `-force_load` for the archive so Rust's exported C ABI symbols are
+retained in the final Flutter application. The generated integration should
+give every package and Apple platform a distinct archive path to avoid clashes
+between projects and between device and simulator builds.
 
-```swift
-// The Rust dynamic framework is linked through the binary target.
-```
-
-The XCFramework is an explicit generated input, like the final native artifact
-of the CocoaPods build path. SwiftPM does not run CargoKit during package
-resolution or Flutter builds.
+SwiftPM build-tool plugins cannot embed and sign a dynamic framework in the
+application's Frameworks directory. CargoKit therefore uses static linkage for
+this automatic build path.
