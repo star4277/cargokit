@@ -19,6 +19,7 @@ MANIFEST_DIR=$(cd "$1" && pwd -P)
 OUTPUT_PARENT=$(mkdir -p "$(dirname "$2")" && cd "$(dirname "$2")" && pwd -P)
 OUTPUT_FILE="$OUTPUT_PARENT/$(basename "$2")"
 PLUGIN_WORK_DIR=$(mkdir -p "$3" && cd "$3" && pwd -P)
+BUILD_TOOL_DIR=${CARGOKIT_BUILD_TOOL_DIR:-"$BASEDIR/build_tool"}
 
 # Xcode's SDK paths break compilation of the host Dart build tool.
 NEW_PATH=$(printf '%s' "$PATH" | tr ":" "\n" | grep -v "Contents/Developer/" | tr "\n" ":")
@@ -44,7 +45,7 @@ if [ -n "${CARGOKIT_DART_PACKAGE_CONFIG:-}" ]; then
   fi
   exec "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" \
     --packages="$CARGOKIT_DART_PACKAGE_CONFIG" \
-    "$BASEDIR/build_tool/bin/build_tool.dart" \
+    "$BUILD_TOOL_DIR/bin/build_tool.dart" \
     build-spm
 fi
 

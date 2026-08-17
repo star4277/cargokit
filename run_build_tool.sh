@@ -12,7 +12,7 @@ cd "$CARGOKIT_TOOL_TEMP_DIR"
 # from Cargokit. This is done to ensure that we don't pollute Cargokit folder
 # with .dart_tool contents.
 
-BUILD_TOOL_PKG_DIR="$BASEDIR/build_tool"
+BUILD_TOOL_PKG_DIR="${CARGOKIT_BUILD_TOOL_DIR:-$BASEDIR/build_tool}"
 
 if [[ -z $FLUTTER_ROOT ]]; then # not defined
   DART=dart
